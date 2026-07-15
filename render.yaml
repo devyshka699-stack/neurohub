@@ -1,0 +1,44 @@
+# Blueprint для деплоя на Render.com (бесплатный тир).
+# Render: New + → Blueprint → выбрать этот репозиторий.
+services:
+  - type: web
+    name: neurohub
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: SHOP_NAME
+        value: NeuroHub
+      - key: SUPPORT_CONTACT
+        value: "@X_wwwww_X"
+      # Секреты: значения задаются в дашборде Render (Environment)
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: PAYMENT_CARD_NUMBER
+        sync: false
+      - key: PAYMENT_CARD_HOLDER
+        sync: false
+      - key: PAYMENT_CARD_BANK
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      # Локальные AI-сервисы (Ollama/ComfyUI) на Render недоступны:
+      # тексты пойдут через Groq, фон/озвучка работают на CPU сервера
+      - key: MARKETING_ENABLED
+        value: "0"
+    # ВНИМАНИЕ: на бесплатном тире диск эфемерный — база и файлы
+    # сбрасываются при каждом деплое/рестарте. Для постоянного хранения
+    # раскомментируйте блок ниже (требуется платный план):
+    # disk:
+    #   name: data
+    #   mountPath: /var/data
+    #   sizeGB: 1

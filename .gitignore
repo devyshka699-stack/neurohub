@@ -1,0 +1,13 @@
+# Секреты — никогда не коммитить
+.env
+tg_monitor.session
+
+# Данные
+shop.db
+uploads/
+ai_cache/
+
+# Python
+.venv/
+__pycache__/
+*.pyc

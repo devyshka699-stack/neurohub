@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Админ-панель — {{ shop_name }}{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-12">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <h1 class="text-2xl sm:text-3xl font-bold">Админ-панель</h1>
+        <form method="post" action="/admin/retention/run">
+            <button type="submit" class="px-4 py-2 rounded-xl bg-white border border-slate-300 text-sm font-semibold hover:bg-slate-100 transition">
+                📣 Прогнать рассылки удержания
+            </button>
+        </form>
+    </div>
+
+    <!-- Фильтр по статусам -->
+    <div class="mt-6 flex flex-wrap gap-2">
+        <a href="/admin" class="px-4 py-2 rounded-xl text-sm font-medium border {{ 'bg-violet-600 text-white border-violet-600' if not active_status else 'bg-white border-slate-300 hover:bg-slate-100' }}">
+            Все
+        </a>
+        {% for code, label in status_labels.items() %}
+        <a href="/admin?status={{ code }}" class="px-4 py-2 rounded-xl text-sm font-medium border {{ 'bg-violet-600 text-white border-violet-600' if active_status == code else 'bg-white border-slate-300 hover:bg-slate-100' }}">
+            {{ label }} ({{ counts[code] }})
+        </a>
+        {% endfor %}
+    </div>
+
+    {% if not orders %}
+    <div class="mt-8 bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500">
+        Заказов нет.
+    </div>
+    {% else %}
+    <div class="mt-8 space-y-4">
+        {% for o in orders %}
+        <div class="bg-white rounded-2xl border border-slate-200 p-6">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <span class="font-bold">Заказ №{{ o.id }}</span>
+                        <span class="px-3 py-1 rounded-full text-xs font-semibold {{ o.status_badge }}">{{ o.status_label }}</span>
+                        {% if o.ai_status %}
+                        <span class="px-3 py-1 rounded-full text-xs font-semibold {{ o.ai_status_badge }}">{{ o.ai_status_label }}</span>
+                        {% endif %}
+                        <span class="text-xs text-slate-400">{{ o.created_at.strftime('%d.%m.%Y %H:%M') }}</span>
+                    </div>
+                    <p class="mt-1 text-sm text-slate-500">
+                        {{ o.service.icon }} {{ o.service.title }} · <span class="font-semibold text-slate-900">{{ o.service.price }} ₽</span>
+                    </p>
+                    <p class="mt-1 text-sm text-slate-500">
+                        Клиент: <span class="font-medium text-slate-700">{{ o.user.name }}</span> ({{ o.user.email }}) ·
+                        Контакт: <span class="font-medium text-slate-700">{{ o.contact }}</span> ·
+                        Оплата: {{ o.payment_method_label }}{% if o.source == 'telegram' %} · <span class="font-medium text-sky-600">из Telegram</span>{% endif %}
+                    </p>
+                </div>
+            </div>
+
+            <p class="mt-3 text-sm text-slate-700 bg-slate-50 rounded-xl px-4 py-3 whitespace-pre-line">{{ o.description }}</p>
+
+            {% if o.file_name %}
+            <p class="mt-2 text-xs text-slate-400">
+                Файл клиента: <a href="/order/{{ o.id }}/file" class="text-violet-600 hover:underline">{{ o.file_name }}</a>
+            </p>
+            {% endif %}
+
+            {% if o.ai_error %}
+            <div class="mt-3 px-4 py-3 rounded-xl bg-red-50 text-sm text-red-800 whitespace-pre-line"><span class="font-semibold">Ошибка AI:</span> {{ o.ai_error }}</div>
+            {% endif %}
+
+            {% if o.qc_status %}
+            {% set qc = o.qc_report_data %}
+            <div class="mt-3 px-4 py-3 rounded-xl border text-sm {{ 'bg-emerald-50 border-emerald-200' if o.qc_status == 'passed' else 'bg-red-50 border-red-200' }}">
+                <div class="flex items-center gap-2">
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold {{ o.qc_badge }}">Качество: {{ o.qc_score }}/100 · {{ 'пройдено' if o.qc_status == 'passed' else 'ниже порога' }}</span>
+                    {% if o.qc_attempts %}<span class="text-xs text-slate-500">попыток генерации: {{ o.qc_attempts }}</span>{% endif %}
+                </div>
+                {% if qc.note %}<p class="mt-1 text-xs text-slate-600">{{ qc.note }}</p>{% endif %}
+                {% if qc.issues %}
+                <ul class="mt-1 text-xs text-red-700 list-disc list-inside">
+                    {% for issue in qc.issues %}<li>{{ issue }}</li>{% endfor %}
+                </ul>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if o.status == 'review' and o.result_path %}
+            <div class="mt-3 px-4 py-3 rounded-xl bg-orange-50 border border-orange-200 text-sm">
+                <span class="font-semibold text-orange-800">Готово к отправке.</span>
+                <a href="/order/{{ o.id }}/result" class="text-violet-600 hover:underline">Посмотреть результат</a> перед подтверждением.
+            </div>
+            {% endif %}
+
+            <div class="mt-4 flex flex-wrap items-start gap-3">
+                {% if o.status == 'review' %}
+                <form method="post" action="/admin/order/{{ o.id }}/approve">
+                    <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition">
+                        ✅ Подтвердить и отправить
+                    </button>
+                </form>
+                <form method="post" action="/admin/order/{{ o.id }}/redo">
+                    <button type="submit" class="px-4 py-2 rounded-xl bg-violet-600 text-white text-sm font-semibold hover:bg-violet-700 transition">
+                        🔁 Перегенерировать
+                    </button>
+                </form>
+                {% endif %}
+
+                {% if o.status in ('new', 'payment_check', 'in_progress') and o.ai_status not in ('queued', 'processing') %}
+                <form method="post" action="/admin/order/{{ o.id }}/ai">
+                    <button type="submit" class="px-4 py-2 rounded-xl bg-violet-600 text-white text-sm font-semibold hover:bg-violet-700 transition">
+                        🤖 Выполнить через AI
+                    </button>
+                </form>
+                {% endif %}
+
+                {% if o.status == 'payment_check' %}
+                <form method="post" action="/admin/order/{{ o.id }}/confirm-payment">
+                    <button type="submit" class="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition">
+                        Подтвердить оплату
+                    </button>
+                </form>
+                {% endif %}
+
+                {% if o.status in ('new', 'payment_check', 'in_progress', 'review') %}
+                <form method="post" action="/admin/order/{{ o.id }}/complete" enctype="multipart/form-data"
+                      class="flex flex-wrap items-center gap-2 bg-slate-50 rounded-xl p-3 border border-slate-200">
+                    <input type="file" name="result_file"
+                           class="text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-white file:text-slate-700 file:text-xs file:font-semibold file:border file:border-slate-300 cursor-pointer">
+                    <input type="text" name="result_comment" placeholder="Комментарий к результату"
+                           class="px-3 py-1.5 rounded-lg border border-slate-300 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-violet-500">
+                    <button type="submit" class="px-4 py-2 rounded-xl bg-white border border-emerald-300 text-emerald-700 text-sm font-semibold hover:bg-emerald-50 transition">
+                        {{ 'Заменить результат вручную' if o.status == 'review' else '✅ Выполнить вручную' }}
+                    </button>
+                </form>
+
+                <form method="post" action="/admin/order/{{ o.id }}/cancel"
+                      onsubmit="return confirm('Отменить заказ №{{ o.id }}?')">
+                    <button type="submit" class="px-4 py-2 rounded-xl bg-white border border-slate-300 text-slate-500 text-sm font-semibold hover:bg-slate-100 transition">
+                        Отменить
+                    </button>
+                </form>
+                {% endif %}
+
+                {% if o.status == 'done' and o.result_path %}
+                <a href="/order/{{ o.id }}/result" class="px-4 py-2 rounded-xl bg-white border border-emerald-300 text-emerald-700 text-sm font-semibold hover:bg-emerald-50 transition">
+                    Скачать отправленный результат
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

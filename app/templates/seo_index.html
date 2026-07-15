@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Все услуги на нейросетях — каталог запросов{% endblock %}
+{% block content %}
+<section class="max-w-5xl mx-auto px-4 py-12">
+    <h1 class="text-3xl font-extrabold">Что можно заказать</h1>
+    <p class="mt-2 text-slate-500">{{ pages|length }} популярных запросов — выберите свой:</p>
+
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-8">
+        {% for p in pages %}
+        <a href="/uslugi/{{ p.slug }}" class="block bg-white rounded-xl border border-slate-200 p-4 hover:border-violet-400 hover:shadow-sm transition">
+            <div class="font-semibold text-slate-800">{{ p.h1 }}</div>
+            <div class="mt-1 text-xs text-slate-400">{{ p.keyword }}</div>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

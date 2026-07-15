@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block title %}Финансы — админ{% endblock %}
+{% block head %}
+<meta http-equiv="refresh" content="3600">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-10">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+            <h1 class="text-3xl font-bold text-slate-900">💰 Финансовый дашборд</h1>
+            <p class="mt-1 text-sm text-slate-500">
+                Данные на {{ stats.generated_at.strftime('%d.%m.%Y %H:%M') }} UTC ·
+                обновляются раз в {{ cache_minutes }} мин (и при перезагрузке страницы через час)
+            </p>
+        </div>
+        <a href="/admin/finance?refresh=1"
+           class="px-4 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-100 transition">
+            ⟳ Пересчитать сейчас
+        </a>
+    </div>
+
+    <!-- KPI: выручка за периоды -->
+    <div class="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-white rounded-2xl border border-slate-200 p-5">
+            <p class="text-xs uppercase tracking-wide text-slate-400">Сегодня</p>
+            <p class="mt-1 text-2xl font-bold text-slate-900">{{ '{:,}'.format(stats.today.revenue).replace(',', ' ') }} ₽</p>
+            <p class="text-xs text-slate-500">{{ stats.today.orders }} заказ(ов)</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-5">
+            <p class="text-xs uppercase tracking-wide text-slate-400">Неделя</p>
+            <p class="mt-1 text-2xl font-bold text-slate-900">{{ '{:,}'.format(stats.week.revenue).replace(',', ' ') }} ₽</p>
+            <p class="text-xs text-slate-500">{{ stats.week.orders }} заказ(ов)</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-5">
+            <p class="text-xs uppercase tracking-wide text-slate-400">Месяц</p>
+            <p class="mt-1 text-2xl font-bold text-slate-900">{{ '{:,}'.format(stats.month.revenue).replace(',', ' ') }} ₽</p>
+            <p class="text-xs text-slate-500">{{ stats.month.orders }} заказ(ов)</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-5">
+            <p class="text-xs uppercase tracking-wide text-slate-400">Средний чек</p>
+            <p class="mt-1 text-2xl font-bold text-slate-900">{{ '{:,}'.format(stats.avg_check).replace(',', ' ') }} ₽</p>
+            <p class="text-xs text-slate-500">за месяц: {{ '{:,}'.format(stats.month_avg_check).replace(',', ' ') }} ₽</p>
+        </div>
+    </div>
+
+    <!-- популярная услуга / прибыльный канал / прогноз -->
+    <div class="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="bg-white rounded-2xl border border-slate-200 p-5">
+            <p class="text-xs uppercase tracking-wide text-slate-400">Самая популярная услуга</p>
+            {% if stats.top_service %}
+            <p class="mt-1 text-lg font-bold text-slate-900">{{ stats.top_service.icon }} {{ stats.top_service.title }}</p>
+            <p class="text-xs text-slate-500">{{ stats.top_service.orders }} заказ(ов) · {{ '{:,}'.format(stats.top_service.revenue).replace(',', ' ') }} ₽</p>
+            {% else %}
+            <p class="mt-1 text-slate-400">Пока нет оплаченных заказов</p>
+            {% endif %}
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-5">
+            <p class="text-xs uppercase tracking-wide text-slate-400">Самый прибыльный канал</p>
+            {% if stats.top_channel %}
+            <p class="mt-1 text-lg font-bold text-slate-900">{{ stats.top_channel.name }}</p>
+            <p class="text-xs text-slate-500">{{ '{:,}'.format(stats.top_channel.revenue).replace(',', ' ') }} ₽ · {{ stats.top_channel.orders }} заказ(ов)</p>
+            {% else %}
+            <p class="mt-1 text-slate-400">Пока нет данных</p>
+            {% endif %}
+        </div>
+        <div class="bg-gradient-to-br from-violet-600 to-indigo-600 rounded-2xl p-5 text-white">
+            <p class="text-xs uppercase tracking-wide text-violet-200">Прогноз на месяц</p>
+            <p class="mt-1 text-2xl font-bold">{{ '{:,}'.format(stats.forecast).replace(',', ' ') }} ₽</p>
+            <p class="text-xs text-violet-200">
+                по текущему темпу: день {{ stats.day_of_month }} из {{ stats.days_in_month }},
+                уже {{ '{:,}'.format(stats.month.revenue).replace(',', ' ') }} ₽
+            </p>
+        </div>
+    </div>
+
+    <!-- график роста доходов -->
+    <div class="mt-6 bg-white rounded-2xl border border-slate-200 p-6">
+        <h2 class="font-bold text-slate-900">Рост доходов за 30 дней</h2>
+        <div class="mt-4" style="height:320px"><canvas id="growthChart"></canvas></div>
+    </div>
+
+    <div class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="bg-white rounded-2xl border border-slate-200 p-6">
+            <h2 class="font-bold text-slate-900">Выручка по услугам</h2>
+            {% if stats.services %}
+            <div class="mt-4" style="height:280px"><canvas id="servicesChart"></canvas></div>
+            {% else %}
+            <p class="mt-4 text-sm text-slate-400">Пока нет данных</p>
+            {% endif %}
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-6">
+            <h2 class="font-bold text-slate-900">Каналы привлечения</h2>
+            {% if stats.channels %}
+            <div class="mt-4" style="height:280px"><canvas id="channelsChart"></canvas></div>
+            {% else %}
+            <p class="mt-4 text-sm text-slate-400">Пока нет данных</p>
+            {% endif %}
+            <p class="mt-3 text-xs text-slate-400">
+                Всего заказов: {{ stats.all_orders }}, из них оплачено: {{ stats.paid_orders }} ·
+                выручка за всё время: {{ '{:,}'.format(stats.total_revenue).replace(',', ' ') }} ₽
+            </p>
+        </div>
+    </div>
+</div>
+
+<script>
+const fmt = v => new Intl.NumberFormat('ru-RU').format(v) + ' ₽';
+
+new Chart(document.getElementById('growthChart'), {
+    data: {
+        labels: {{ stats.chart_labels | tojson }},
+        datasets: [
+            {
+                type: 'bar',
+                label: 'Выручка за день',
+                data: {{ stats.chart_daily | tojson }},
+                backgroundColor: 'rgba(124, 58, 237, 0.35)',
+                borderRadius: 4,
+                yAxisID: 'y',
+            },
+            {
+                type: 'line',
+                label: 'Накопительно',
+                data: {{ stats.chart_cumulative | tojson }},
+                borderColor: 'rgb(16, 185, 129)',
+                backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0,
+                yAxisID: 'y1',
+            },
+        ],
+    },
+    options: {
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+            tooltip: { callbacks: { label: c => c.dataset.label + ': ' + fmt(c.parsed.y) } },
+        },
+        scales: {
+            y: { position: 'left', ticks: { callback: v => fmt(v) } },
+            y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: v => fmt(v) } },
+        },
+    },
+});
+
+{% if stats.services %}
+new Chart(document.getElementById('servicesChart'), {
+    type: 'bar',
+    data: {
+        labels: {{ stats.services | map(attribute='title') | list | tojson }},
+        datasets: [{
+            label: 'Выручка',
+            data: {{ stats.services | map(attribute='revenue') | list | tojson }},
+            backgroundColor: 'rgba(99, 102, 241, 0.6)',
+            borderRadius: 6,
+        }],
+    },
+    options: {
+        indexAxis: 'y',
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: c => fmt(c.parsed.x) } },
+        },
+        scales: { x: { ticks: { callback: v => fmt(v) } } },
+    },
+});
+{% endif %}
+
+{% if stats.channels %}
+new Chart(document.getElementById('channelsChart'), {
+    type: 'doughnut',
+    data: {
+        labels: {{ stats.channels | map(attribute='name') | list | tojson }},
+        datasets: [{
+            data: {{ stats.channels | map(attribute='revenue') | list | tojson }},
+            backgroundColor: [
+                'rgba(124, 58, 237, 0.7)',
+                'rgba(16, 185, 129, 0.7)',
+                'rgba(245, 158, 11, 0.7)',
+                'rgba(59, 130, 246, 0.7)',
+            ],
+        }],
+    },
+    options: {
+        maintainAspectRatio: false,
+        plugins: {
+            tooltip: { callbacks: { label: c => c.label + ': ' + fmt(c.parsed) } },
+        },
+    },
+});
+{% endif %}
+</script>
+{% endblock %}
