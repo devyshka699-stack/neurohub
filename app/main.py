@@ -88,7 +88,7 @@ app = FastAPI(title=f"{config.SHOP_NAME} — витрина")
 async def _start_ai_worker():
     ai_queue.start()
     from . import tgbot
-    tgbot.start()
+    await tgbot.start()
     from .marketing import engine as marketing_engine
     marketing_engine.start()
     from .retention import scheduler as retention_scheduler

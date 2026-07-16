@@ -57,18 +57,46 @@ class OrderFlow(StatesGroup):
 
 # ---------- запуск ----------
 
-def start() -> None:
+def _token() -> str:
+    """Возвращает токен или пустую строку, если он не задан / заглушка."""
+    raw = (config.TELEGRAM_BOT_TOKEN or "").strip()
+    if not raw or raw.lower() in {"none", "null", "undefined", "-"}:
+        return ""
+    return raw
+
+
+async def start() -> None:
     """Запускает поллинг бота фоновой задачей внутри процесса FastAPI."""
     global bot, _loop
-    if not config.TELEGRAM_BOT_TOKEN:
-        log.info("TELEGRAM_BOT_TOKEN не задан — Telegram-бот не запущен")
+    token = _token()
+    if not token:
+        log.warning(
+            "TELEGRAM_BOT_TOKEN не задан или заглушка — Telegram-бот не запущен. "
+            "Проверьте Environment на Render."
+        )
         return
-    _loop = asyncio.get_event_loop()
-    bot = Bot(config.TELEGRAM_BOT_TOKEN)
+    # в логах только хвост — чтобы понять, что токен подхвачен, не раскрывая секрет
+    log.info("TELEGRAM_BOT_TOKEN подхвачен (…%s)", token[-6:])
+    try:
+        _loop = asyncio.get_running_loop()
+    except RuntimeError:
+        _loop = asyncio.get_event_loop()
+    bot = Bot(token)
     dp = Dispatcher(storage=MemoryStorage())
     dp.include_router(router)
     ai_queue.add_listener(notify_order)
-    _loop.create_task(_run(dp))
+    _loop.create_task(_run_safe(dp))
+    log.info("Telegram-бот: задача поллинга поставлена в очередь")
+
+
+async def _run_safe(dp: Dispatcher) -> None:
+    try:
+        await _run(dp)
+    except Exception:
+        log.exception(
+            "Telegram-бот упал при запуске. Проверьте токен в Environment "
+            "и что бот не запущен где-то ещё (локально / второй инстанс)."
+        )
 
 
 async def _run(dp: Dispatcher) -> None:
@@ -82,7 +110,7 @@ async def _run(dp: Dispatcher) -> None:
         BotCommand(command="ref", description="Реферальная ссылка"),
     ])
     await bot.delete_webhook(drop_pending_updates=True)
-    log.info("Telegram-бот @%s запущен", _bot_username)
+    log.info("Telegram-бот @%s запущен и слушает сообщения", _bot_username)
     await dp.start_polling(bot, handle_signals=False)
 
 
