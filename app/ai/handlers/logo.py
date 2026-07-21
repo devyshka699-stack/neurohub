@@ -5,7 +5,7 @@ import zipfile
 from pathlib import Path
 
 from .base import AIResult
-from .image import comfy_txt2img
+from .image import comfy_txt2img, to_english_prompt
 
 _PROMPT = (
     "minimalist vector logo design, {description}, flat design, simple geometric "
@@ -25,8 +25,9 @@ def _vectorize(png: Path, svg: Path) -> None:
 async def run(
     description: str, input_path: Path | None, workdir: Path, attempt: int = 0
 ) -> AIResult:
+    prompt = await to_english_prompt(description)
     png_bytes = await comfy_txt2img(
-        prompt=_PROMPT.format(description=description),
+        prompt=_PROMPT.format(description=prompt),
         negative=_NEGATIVE,
         width=768,
         height=768,

@@ -1,7 +1,9 @@
 """Генерация изображений: Stable Diffusion через ComfyUI API."""
 
 import asyncio
+import logging
 import random
+import re
 from pathlib import Path
 
 import httpx
@@ -9,16 +11,58 @@ import httpx
 from ... import config
 from .base import AIResult
 
+log = logging.getLogger("ai.image")
+
 NEGATIVE = "blurry, low quality, watermark, text, deformed, ugly"
+
+_CYRILLIC = re.compile("[А-Яа-яЁё]")
+
+
+async def to_english_prompt(description: str) -> str:
+    """Переводит описание на английский: SD 1.5 почти не понимает русский.
+
+    Перевод через Ollama; если она недоступна — возвращаем как есть
+    (лучше плохой промпт, чем упавший заказ).
+    """
+    if not _CYRILLIC.search(description):
+        return description
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                f"{config.OLLAMA_URL}/api/generate",
+                json={
+                    "model": config.OLLAMA_MODEL,
+                    "prompt": (
+                        "Translate this image description from Russian to English. "
+                        "Reply with ONLY the translation, no explanations, "
+                        f"no quotes:\n\n{description}"
+                    ),
+                    "stream": False,
+                    "options": {"temperature": 0.2},
+                },
+            )
+            resp.raise_for_status()
+            text = resp.json().get("response", "").strip().strip('"')
+            # модель иногда добавляет пояснения — берём первую непустую строку
+            first_line = next(
+                (ln.strip() for ln in text.splitlines() if ln.strip()), ""
+            )
+            if first_line and not _CYRILLIC.search(first_line):
+                log.info("Промпт переведён: %r -> %r", description, first_line)
+                return first_line
+    except Exception:
+        log.warning("Перевод промпта недоступен, используем оригинал")
+    return description
 
 
 async def run(
     description: str, input_path: Path | None, workdir: Path, attempt: int = 0
 ) -> AIResult:
+    prompt = await to_english_prompt(description)
     # на повторных попытках повышаем число шагов для лучшего качества
     steps = min(40, 25 + 5 * attempt)
     png = await comfy_txt2img(
-        prompt=f"{description}, high quality, detailed, masterpiece",
+        prompt=f"{prompt}, high quality, detailed, masterpiece",
         negative=NEGATIVE,
         steps=steps,
     )
