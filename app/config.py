@@ -60,7 +60,10 @@ EDGE_TTS_VOICE = os.getenv("EDGE_TTS_VOICE", "ru-RU-DmitryNeural")
 # Апскейл: Real-ESRGAN (ncnn-vulkan бинарник)
 REALESRGAN_BIN = os.getenv("REALESRGAN_BIN", "")
 
-# Колоризация: DeOldify (папка с клонированным репозиторием и весами)
+# ffmpeg для QC аудио (pydub). Пусто — ищем в PATH / imageio-ffmpeg
+FFMPEG_BIN = os.getenv("FFMPEG_BIN", "")
+
+# Колоризация: DeOldify (запасной путь; основной — ComfyUI img2img)
 DEOLDIFY_DIR = os.getenv("DEOLDIFY_DIR", "")
 
 # ---------- Telegram-бот (модуль 3) ----------

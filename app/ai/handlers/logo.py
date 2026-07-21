@@ -8,10 +8,15 @@ from .base import AIResult
 from .image import comfy_txt2img, to_english_prompt
 
 _PROMPT = (
-    "minimalist vector logo design, {description}, flat design, simple geometric "
-    "shapes, clean lines, white background, professional branding, high quality"
+    "single centered minimalist vector logo icon for {description}, "
+    "one logo only, flat design, simple geometric shapes, clean lines, "
+    "isolated on solid white background, professional branding, high quality"
 )
-_NEGATIVE = "photo, realistic, 3d render, text, letters, watermark, blurry, complex"
+_NEGATIVE = (
+    "photo, realistic, 3d render, text, letters, watermark, blurry, complex, "
+    "collage, sheet, multiple logos, grid of logos, variations, mockup board, "
+    "many icons, logo sheet, catalogue"
+)
 
 
 def _vectorize(png: Path, svg: Path) -> None:

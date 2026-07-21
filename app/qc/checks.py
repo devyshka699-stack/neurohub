@@ -268,13 +268,16 @@ def check_audio(path: Path, description: str) -> QCResult:
             "pydub недоступен, проверка по размеру файла"
         )
 
-    try:
-        audio = AudioSegment.from_file(path)
-    except Exception as exc:
-        # обычно значит отсутствие ffmpeg
+    # чтобы pydub не ругался и умел открывать mp3 напрямую, если захочет
+    ffmpeg = _ffmpeg_exe()
+    if ffmpeg:
+        AudioSegment.converter = ffmpeg
+        AudioSegment.ffprobe = ffmpeg
+
+    audio = _decode_audio(path, AudioSegment)
+    if audio is None:
         ok = path.stat().st_size > 2000
-        checks["decode_error"] = str(exc)
-        checks["hint"] = "нужен ffmpeg для декодирования mp3"
+        checks["hint"] = "аудио не декодируется (нет ffmpeg?)"
         if not ok:
             issues.append("Аудио не декодируется и слишком маленькое")
         return QCResult(
@@ -316,6 +319,56 @@ def check_audio(path: Path, description: str) -> QCResult:
     passed = score >= config.QC_MIN_SCORE
     note = f"{round(duration,1)}с, громкость {checks['dBFS']} dBFS"
     return QCResult(score, passed, checks, issues, note)
+
+
+def _ffmpeg_exe() -> str | None:
+    """Порядок: FFMPEG_BIN из конфига → PATH → imageio-ffmpeg."""
+    import shutil
+    from .. import config
+
+    if config.FFMPEG_BIN and Path(config.FFMPEG_BIN).exists():
+        return config.FFMPEG_BIN
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except ImportError:
+        return None
+
+
+def _decode_audio(path: Path, AudioSegment):
+    """Декодирует аудио. mp3 конвертируется в wav через ffmpeg
+    (pydub без системного ffmpeg умеет читать только wav)."""
+    import subprocess
+    import tempfile
+
+    if path.suffix.lower() == ".wav":
+        try:
+            return AudioSegment.from_wav(path)
+        except Exception:
+            return None
+
+    ffmpeg = _ffmpeg_exe()
+    if ffmpeg is None:
+        try:
+            return AudioSegment.from_file(path)
+        except Exception:
+            return None
+
+    with tempfile.TemporaryDirectory(prefix="qc_audio_") as tmp:
+        wav = Path(tmp) / "audio.wav"
+        proc = subprocess.run(
+            [ffmpeg, "-y", "-i", str(path), str(wav)],
+            capture_output=True, timeout=120,
+        )
+        if proc.returncode != 0 or not wav.exists():
+            return None
+        try:
+            return AudioSegment.from_wav(wav)
+        except Exception:
+            return None
 
 
 # ---------- базовая ----------

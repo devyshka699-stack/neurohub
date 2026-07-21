@@ -51,22 +51,51 @@ uvicorn app.main:app --reload
 | Услуга | Модель | Что нужно для работы |
 |---|---|---|
 | Тексты | Llama через **Ollama**, фолбэк **Groq API** | `ollama serve` + `ollama pull llama3.2`, либо `GROQ_API_KEY` |
-| Изображения | Stable Diffusion через **ComfyUI** | ComfyUI на `localhost:8188` с чекпоинтом |
+| Изображения | Stable Diffusion через **ComfyUI** | ComfyUI на `localhost:8188` с чекпоинтом SD 1.5; русские промпты автопереводятся через Ollama |
 | Удаление фона | **rembg** (u2net) | ставится из requirements, работает сразу |
 | Озвучка | **Edge TTS** | ставится из requirements, нужен интернет |
-| Колоризация | **DeOldify** | клонировать репозиторий, задать `DEOLDIFY_DIR` |
-| Апскейл | **Real-ESRGAN** (ncnn-vulkan) | скачать бинарник, задать `REALESRGAN_BIN` |
-| Логотипы | Stable Diffusion + **vtracer** (SVG) | ComfyUI, vtracer из requirements |
+| Колоризация | **ComfyUI img2img** (основной), **DeOldify** (запасной) | ComfyUI запущен; опционально `DEOLDIFY_DIR` |
+| Апскейл | **Real-ESRGAN** (ncnn-vulkan) | бинарник, `REALESRGAN_BIN` |
+| Логотипы | Stable Diffusion + **vtracer** (SVG) | ComfyUI; один значок по центру (не лист вариантов) |
 
 Как устроено:
 
 1. **Очередь** — `asyncio.Queue` с фоновым воркером внутри процесса FastAPI (`app/ai/queue.py`). После рестарта зависшие задачи возвращаются в очередь.
 2. **Автовыбор модели** — тип задачи определяется по названию услуги (`app/ai/tasks.py`).
 3. **Кэш** — ключ SHA-256 от типа задачи + описания + байтов входного файла. Повторный одинаковый заказ отдаётся из `ai_cache/` мгновенно.
-4. **Запуск** — автоматически после кнопки «Подтвердить оплату» (отключается `AI_AUTO_PROCESS=0`) или вручную кнопкой «🤖 Выполнить через AI» в админке.
-5. **Ошибки** — если модель недоступна (не запущен ComfyUI, нет весов DeOldify), заказ помечается «ошибка AI» с инструкцией в админке, и его можно выполнить вручную.
+4. **QC** — после генерации результат проверяется (`app/qc/`). Для аудио нужен `ffmpeg` (`FFMPEG_BIN` или PATH / imageio-ffmpeg).
+5. **Запуск** — автоматически после кнопки «Подтвердить оплату» (отключается `AI_AUTO_PROCESS=0`) или вручную кнопкой «🤖 Выполнить через AI» в админке.
+6. **Ошибки** — если модель недоступна (не запущен ComfyUI), заказ помечается «ошибка AI» с инструкцией в админке, и его можно выполнить вручную.
 
-Переменные окружения AI: `OLLAMA_URL`, `OLLAMA_MODEL`, `GROQ_API_KEY`, `GROQ_MODEL`, `COMFYUI_URL`, `COMFYUI_CHECKPOINT`, `EDGE_TTS_VOICE`, `REALESRGAN_BIN`, `DEOLDIFY_DIR`, `AI_AUTO_PROCESS`.
+Переменные окружения AI: `OLLAMA_URL`, `OLLAMA_MODEL`, `GROQ_API_KEY`, `GROQ_MODEL`, `COMFYUI_URL`, `COMFYUI_CHECKPOINT`, `EDGE_TTS_VOICE`, `REALESRGAN_BIN`, `FFMPEG_BIN`, `DEOLDIFY_DIR`, `AI_AUTO_PROCESS`.
+
+### Тексты на Render (Groq)
+
+На бесплатном Render нет Ollama. Чтобы автогенерация текстовстов работала на проде:
+
+1. Создайте ключ на [console.groq.com](https://console.groq.com) → API Keys (бесплатно).
+2. На Render → сервис **neurohub** → **Environment** → добавьте:
+   - Key: `GROQ_API_KEY`
+   - Value: `gsk_...`
+3. **Save, rebuild, and deploy**.
+
+Локально ключ не обязателен — тексты идут через Ollama. Не коммитьте ключ в git и не кладите его в публичный чат.
+
+### Контракт локального воркера (Мака) для заказов с Render
+
+Сайт на Render и нейросети на Маке — разные машины. Чтобы продовые заказы обрабатывались локальным AI, нужен отдельный воркер на Маке (пока **не реализован**, контракт на будущее):
+
+| Шаг | Что делает |
+|---|---|
+| 1 | Поллит Render API: оплаченные заказы в статусе `in_progress` с `ai_status` пустым / `queued` |
+| 2 | Скачивает входной файл (если есть) |
+| 3 | Прогоняет через локальную `ai_queue` / handlers (ComfyUI, Ollama, rembg…) |
+| 4 | Заливает результат обратно на Render (файл + комментарий) |
+| 5 | Переводит заказ в `review` или `done` по тем же правилам QC, что и локальный сайт |
+
+Нужные эндпоинты (набросать при реализации): `GET /api/worker/orders/pending` (с секретом `WORKER_TOKEN`), `POST /api/worker/orders/{id}/result` (multipart). Пока без воркера заказы на картинки/логотипы/апскейл с Render уходят в ошибку AI и выполняются вручную из админки; тексты — через Groq после шага выше.
+
+Переменные для воркера (черновик): `WORKER_TOKEN`, `RENDER_BASE_URL` (= `https://neurohub-hjs6.onrender.com`), локальные `COMFYUI_URL` / `OLLAMA_URL` как сейчас.
 
 ## Telegram-бот (модуль 3)
 
