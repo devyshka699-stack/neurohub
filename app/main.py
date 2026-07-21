@@ -92,6 +92,12 @@ async def _start_ai_worker():
     # На Render с REMOTE_WORKER локальную AI-очередь всё равно поднимаем
     # (тексты через Groq / rembg), но schedule_ai не ставит туда remote-заказы.
     # Если REMOTE_WORKER — тяжёлые заказы заберёт Мак.
+    import logging
+    logging.getLogger("app").info(
+        "WORKER: token=%s remote=%s",
+        "задан" if config.WORKER_TOKEN else "НЕ ЗАДАН",
+        "да" if config.REMOTE_WORKER else "нет",
+    )
     ai_queue.start()
     from . import tgbot
     await tgbot.start()
@@ -99,6 +105,16 @@ async def _start_ai_worker():
     marketing_engine.start()
     from .retention import scheduler as retention_scheduler
     retention_scheduler.start()
+
+
+@app.get("/api/worker/status")
+def worker_status():
+    """Без токена: видно, подхватил ли сервер WORKER_TOKEN (для отладки Render)."""
+    return {
+        "worker_token_set": bool(config.WORKER_TOKEN),
+        "remote_worker": config.REMOTE_WORKER,
+        "token_length": len(config.WORKER_TOKEN),
+    }
 app.add_middleware(SessionMiddleware, secret_key=config.SECRET_KEY)
 
 BASE_DIR = Path(__file__).resolve().parent

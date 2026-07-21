@@ -69,7 +69,10 @@ DEOLDIFY_DIR = os.getenv("DEOLDIFY_DIR", "")
 # ---------- Удалённый воркер (Мака ↔ Render) ----------
 
 # Секрет для API /api/worker/* (одинаковый на Render и на Маке)
-WORKER_TOKEN = os.getenv("WORKER_TOKEN", "").strip()
+# убираем кавычки, если вставили в Render как "secret" или 'secret'
+WORKER_TOKEN = os.getenv("WORKER_TOKEN", "").strip().strip('"').strip("'")
+if WORKER_TOKEN.lower() in {"none", "null", "undefined", "-"}:
+    WORKER_TOKEN = ""
 
 # На Render =1: заказы только ставятся в очередь, AI не крутится на сервере
 REMOTE_WORKER = os.getenv("REMOTE_WORKER", "0") == "1"
