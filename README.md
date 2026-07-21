@@ -83,19 +83,42 @@ uvicorn app.main:app --reload
 
 ### Контракт локального воркера (Мака) для заказов с Render
 
-Сайт на Render и нейросети на Маке — разные машины. Чтобы продовые заказы обрабатывались локальным AI, нужен отдельный воркер на Маке (пока **не реализован**, контракт на будущее):
+Сайт на Render и нейросети на Маке — разные машины. Воркер на Маке забирает оплаченные заказы и гоняет их через локальный AI.
 
-| Шаг | Что делает |
+**На Render (Environment):**
+
+| Переменная | Значение |
 |---|---|
-| 1 | Поллит Render API: оплаченные заказы в статусе `in_progress` с `ai_status` пустым / `queued` |
-| 2 | Скачивает входной файл (если есть) |
-| 3 | Прогоняет через локальную `ai_queue` / handlers (ComfyUI, Ollama, rembg…) |
-| 4 | Заливает результат обратно на Render (файл + комментарий) |
-| 5 | Переводит заказ в `review` или `done` по тем же правилам QC, что и локальный сайт |
+| `REMOTE_WORKER` | `1` — не крутить AI на сервере, только ставить в очередь |
+| `WORKER_TOKEN` | длинный секрет (тот же, что в локальном `.env`) |
 
-Нужные эндпоинты (набросать при реализации): `GET /api/worker/orders/pending` (с секретом `WORKER_TOKEN`), `POST /api/worker/orders/{id}/result` (multipart). Пока без воркера заказы на картинки/логотипы/апскейл с Render уходят в ошибку AI и выполняются вручную из админки; тексты — через Groq после шага выше.
+**На Маке (`.env` рядом с проектом):**
 
-Переменные для воркера (черновик): `WORKER_TOKEN`, `RENDER_BASE_URL` (= `https://neurohub-hjs6.onrender.com`), локальные `COMFYUI_URL` / `OLLAMA_URL` как сейчас.
+| Переменная | Значение |
+|---|---|
+| `WORKER_BASE_URL` | `https://neurohub-hjs6.onrender.com` |
+| `WORKER_TOKEN` | тот же секрет |
+| `REMOTE_WORKER` | `0` (локальный сайт на :8017 по желанию обрабатывает сам) |
+| `WORKER_POLL_INTERVAL` | `30` (секунды) |
+
+**Запуск воркера** (ComfyUI/Ollama должны быть доступны, если нужны услуге):
+
+```bash
+cd ai-services-shop
+.venv/bin/python -m app.worker
+```
+
+**API** (заголовок `Authorization: Bearer <WORKER_TOKEN>`):
+
+| Метод | Путь | Назначение |
+|---|---|---|
+| GET | `/api/worker/orders/pending` | Список заказов `in_progress` без результата |
+| POST | `/api/worker/orders/{id}/claim` | Занять заказ (`ai_status=processing`) |
+| GET | `/api/worker/orders/{id}/file` | Скачать файл клиента |
+| POST | `/api/worker/orders/{id}/result` | Залить результат + QC → `review` или `done` |
+| POST | `/api/worker/orders/{id}/error` | Зафиксировать ошибку AI |
+
+Зависший `processing` дольше `WORKER_STALE_MINUTES` (по умолчанию 45) снова отдаётся в pending. Воркер раз в цикл дергает главную страницу Render, чтобы бесплатный инстанс не «спал» во время работы.
 
 ## Telegram-бот (модуль 3)
 

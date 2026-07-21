@@ -394,7 +394,8 @@ async def _mark_paid(message: Message, order_id: int, method: str) -> None:
         db.commit()
 
         if config.AI_AUTO_PROCESS:
-            ai_queue.enqueue(order, db)
+            from .ai.dispatch import schedule_ai
+            schedule_ai(order, db)
 
     await message.answer(
         f"💳 Оплата получена! Заказ №{order_id} взят в работу.\n"

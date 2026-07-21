@@ -32,8 +32,12 @@ services:
         value: ""
       - key: TELEGRAM_BOT_TOKEN
         value: ""
-      # Локальные AI-сервисы (Ollama/ComfyUI) на Render недоступны:
-      # тексты пойдут через Groq, фон/озвучка работают на CPU сервера
+      # Заказы AI забирает воркер на Маке (python -m app.worker)
+      - key: REMOTE_WORKER
+        value: "1"
+      - key: WORKER_TOKEN
+        sync: false
+      # Локальные AI-сервисы (Ollama/ComfyUI) на Render недоступны
       - key: MARKETING_ENABLED
         value: "0"
     # ВНИМАНИЕ: на бесплатном тире диск эфемерный — база и файлы

@@ -29,6 +29,8 @@ from .models import (
 from .security import hash_password, verify_password
 from .seed import seed
 from .ai import queue as ai_queue
+from .ai.dispatch import schedule_ai
+from .api.worker import router as worker_router
 from .ai.tasks import detect_task
 from .marketing import seo as seo_pages
 
@@ -82,10 +84,14 @@ with SessionLocal() as _db:
     seed(_db)
 
 app = FastAPI(title=f"{config.SHOP_NAME} — витрина")
+app.include_router(worker_router)
 
 
 @app.on_event("startup")
 async def _start_ai_worker():
+    # На Render с REMOTE_WORKER локальную AI-очередь всё равно поднимаем
+    # (тексты через Groq / rembg), но schedule_ai не ставит туда remote-заказы.
+    # Если REMOTE_WORKER — тяжёлые заказы заберёт Мак.
     ai_queue.start()
     from . import tgbot
     await tgbot.start()
@@ -434,7 +440,7 @@ def confirm_payment(order_id: int, request: Request, db: Session = Depends(get_d
     order.status = STATUS_IN_PROGRESS
     db.commit()
     if config.AI_AUTO_PROCESS:
-        ai_queue.enqueue(order, db)
+        schedule_ai(order, db)
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -446,7 +452,7 @@ def process_with_ai(order_id: int, request: Request, db: Session = Depends(get_d
         raise HTTPException(404)
     if order.ai_status in ("queued", "processing"):
         raise HTTPException(400, "Заказ уже в AI-очереди")
-    ai_queue.enqueue(order, db)
+    schedule_ai(order, db)
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -483,7 +489,7 @@ def redo_order(order_id: int, request: Request, db: Session = Depends(get_db)):
     order.qc_score = None
     order.qc_report = None
     db.commit()
-    ai_queue.enqueue(order, db)
+    schedule_ai(order, db)
     return RedirectResponse("/admin", status_code=303)
 
 

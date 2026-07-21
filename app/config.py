@@ -66,6 +66,23 @@ FFMPEG_BIN = os.getenv("FFMPEG_BIN", "")
 # Колоризация: DeOldify (запасной путь; основной — ComfyUI img2img)
 DEOLDIFY_DIR = os.getenv("DEOLDIFY_DIR", "")
 
+# ---------- Удалённый воркер (Мака ↔ Render) ----------
+
+# Секрет для API /api/worker/* (одинаковый на Render и на Маке)
+WORKER_TOKEN = os.getenv("WORKER_TOKEN", "").strip()
+
+# На Render =1: заказы только ставятся в очередь, AI не крутится на сервере
+REMOTE_WORKER = os.getenv("REMOTE_WORKER", "0") == "1"
+
+# Для локального процесса: куда поллить (URL сайта на Render)
+WORKER_BASE_URL = os.getenv("WORKER_BASE_URL", "").rstrip("/")
+
+# Интервал опроса, секунды
+WORKER_POLL_INTERVAL = int(os.getenv("WORKER_POLL_INTERVAL", "30"))
+
+# Заказ в processing дольше N минут считается зависшим и снова отдаётся воркеру
+WORKER_STALE_MINUTES = int(os.getenv("WORKER_STALE_MINUTES", "45"))
+
 # ---------- Telegram-бот (модуль 3) ----------
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
