@@ -32,9 +32,16 @@ async def run(
     binary = _find_bin()
     out = workdir / "upscaled.png"
 
+    cmd = [binary, "-i", str(src), "-o", str(out), "-n", "realesrgan-x4plus"]
+    # папка models лежит рядом с бинарником — передаём путь явно,
+    # иначе ncnn ищет её относительно текущей директории
+    models_dir = Path(binary).parent / "models"
+    if models_dir.exists():
+        cmd += ["-m", str(models_dir)]
+
     proc = await asyncio.to_thread(
         subprocess.run,
-        [binary, "-i", str(src), "-o", str(out), "-n", "realesrgan-x4plus"],
+        cmd,
         capture_output=True,
         text=True,
         timeout=600,

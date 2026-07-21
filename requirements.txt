@@ -15,6 +15,7 @@ playwright>=1.40
 # Quality control (модуль 6)
 pyspellchecker>=0.8
 pydub>=0.25
+imageio-ffmpeg>=0.5
 
 # AI backend (модуль 2)
 httpx>=0.27
